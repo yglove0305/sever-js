@@ -1,10 +1,11 @@
 // api/upload-url.ts
-import { NextRequest } from "next/server";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { BUCKET, KEY_PREFIX, REGION, publicUrl, guessContentType } from "./_s3";
 
-export const config = { runtime: "nodejs18.x" };
+// 함수 레벨 runtime 지정은 'nodejs'만 허용됨. 버전 숫자 금지.
+// 필요 없으면 이 줄 자체를 제거해도 됩니다.
+export const config = { runtime: "nodejs" };
 
 const s3 = new S3Client({ region: REGION });
 
@@ -21,14 +22,13 @@ export default async function handler(req: any, res: any) {
       Bucket: BUCKET,
       Key: key,
       ContentType: ct,
-      // ACL: isPublic ? "public-read" : undefined, // 버킷 정책/퍼블릭 액세스 설정에 따라 필요시 사용
       Metadata: {
         tags: Array.isArray(tags) ? tags.join(",") : (tags || ""),
         ts: String(ts),
       }
     });
 
-    const uploadUrl = await getSignedUrl(s3, putCmd, { expiresIn: 60 }); // 60초 유효
+    const uploadUrl = await getSignedUrl(s3, putCmd, { expiresIn: 60 });
     const url = publicUrl(key);
 
     return res.status(200).json({
