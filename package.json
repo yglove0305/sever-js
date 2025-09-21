@@ -1,1 +1,19 @@
 
+{
+  "name": "serverless-media-hosting",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo \"No build step for static HTML\"",
+    "start": "vercel dev"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.645.0",
+    "@aws-sdk/s3-request-presigner": "^3.645.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "@types/node": "^20.14.12"
+  }
+}
