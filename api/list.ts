@@ -1,8 +1,8 @@
 // api/list.ts
 import { NextApiRequest, NextApiResponse } from "next";
-import { listPage, publicUrl, parseTags, BUCKET, KEY_PREFIX } from "./_s3";
+import { listPage, publicUrl, parseTags, KEY_PREFIX } from "./_s3";
 
-export const config = { runtime: "nodejs18.x" };
+export const config = { runtime: "nodejs" };
 
 function typeFromKey(key: string) {
   const ext = key.split(".").pop()?.toLowerCase() || "";
@@ -37,17 +37,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           size: obj.Size || 0,
           createdAt: obj.LastModified ? new Date(obj.LastModified).getTime() : undefined,
           type: typeFromKey(key),
-          // width/height/duration/tags는 별도 메타 저장을 붙이면 반환 가능 (여기선 생략)
         };
       });
 
-    if (query) {
-      items = items.filter(i => i.key.toLowerCase().includes(query));
-    }
-    if (tags.length) {
-      // 간단 태그 필터: 키에 [tag] 포함하는 전략을 쓰는 경우 (예: uploads/[tag1,tag2]-filename.jpg)
-      items = items.filter(i => tags.every(t => i.key.toLowerCase().includes(t.toLowerCase())));
-    }
+    if (query) items = items.filter(i => i.key.toLowerCase().includes(query));
+    if (tags.length) items = items.filter(i => tags.every(t => i.key.toLowerCase().includes(t.toLowerCase())));
 
     const [field, dir] = (sort || "createdAt:desc").split(":");
     items.sort((a: any, b: any) => {
@@ -61,3 +55,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ error: "list failed" });
   }
 }
+
