@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>서버리스 미디어 호스팅</title>
+  <style>
+    :root { --bg:#0f1216; --panel:#151a21; --muted:#9aa4b2; --text:#e8eef6; --accent:#4da3ff; --border:#222a33; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:#0f1216; color:var(--text); font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR",Arial,sans-serif; }
+    header { position:sticky; top:0; z-index:30; backdrop-filter:blur(10px); background:#0f1216cc; border-bottom:1px solid var(--border); }
+    .wrap { max-width:1200px; margin:0 auto; padding:16px; }
+    .title-bar { display:flex; gap:12px; align-items:center; justify-content:space-between; }
+    .brand { font-weight:700; }
+    .controls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .btn { background:#1a212c; border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:10px; cursor:pointer; }
+    .btn.primary { background:#263852; border-color:#2d4466; }
+    .btn.danger { background:#3a2630; border-color:#4a2a33; color:#ffd9d9; }
+    .input, select { background:#0f1319; border:1px solid var(--border); color:var(--text); padding:8px 10px; border-radius:10px; outline:none; }
+    .toolbar { display:grid; grid-template-columns:1fr auto; gap:12px; align-items:center; margin-top:10px; }
+    .search-row { display:flex; gap:8px; flex-wrap:wrap; }
+    .chip { background:#1e2630; border:1px solid var(--border); color:#a9b4c3; padding:6px 10px; border-radius:999px; font-size:12px; }
+    main { padding: 10px 16px 120px; }
+    .dropzone { border:2px dashed #334155; border-radius:16px; padding:22px; background:#0c1116; display:grid; gap:10px; justify-items:center; text-align:center; }
+    .dropzone.drag { border-color:var(--accent); background:#0f1822; }
+    .grid { margin-top:16px; display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:12px; }
+    .card { position:relative; overflow:hidden; border-radius:14px; background:#0c1016; border:1px solid var(--border); }
+    .thumb-wrap { aspect-ratio:16/9; display:grid; place-items:center; background:#0b0f14; overflow:hidden; }
+    .thumb { width:100%; height:100%; object-fit:cover; display:block; }
+    .badge { position:absolute; top:8px; left:8px; background:#0f141b; border:1px solid var(--border); padding:4px 8px; border-radius:999px; font-size:12px; color:#a9b4c3; }
+    .meta { display:flex; justify-content:space-between; align-items:center; padding:10px; gap:10px; }
+    .tag { font-size:12px; background:#111821; color:#9db2c9; padding:3px 8px; border-radius:999px; border:1px solid #202a36; }
+    .prog { position:absolute; left:0; bottom:0; width:100%; height:4px; background:#0d141c; }
+    .prog>div { height:100%; background:linear-gradient(90deg, #4da3ff, #7bb0ff); width:0%; transition:width .15s linear; }
+    .lightbox { position:fixed; inset:0; background:#000000cc; display:none; z-index:50; align-items:center; justify-content:center; padding:24px; }
+    .lightbox.open { display:flex; }
+    .lightbox-inner { max-width:min(96vw,1200px); max-height:86vh; background:#0b0f14; border:1px solid var(--border); border-radius:14px; overflow:hidden; display:grid; grid-template-rows:auto 1fr; width:100%; }
+    .lightbox-head { padding:10px; display:flex; gap:8px; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); }
+    .viewer { display:grid; place-items:center; background:#05080c; }
+    .viewer img, .viewer video { max-width:100%; max-height:80vh; }
+    .toast { position:fixed; bottom:20px; right:20px; background:#121923; color:#dce6f3; padding:10px 14px; border-radius:12px; border:1px solid var(--border); box-shadow:0 6px 20px #00000055; opacity:0; transform:translateY(10px); transition:.2s; z-index:60; }
+    .toast.show { opacity:1; transform:translateY(0); }
+    .footer { color:#9aa4b2; text-align:center; padding:20px; border-top:1px solid var(--border); background:#0a0e13; position:fixed; left:0; right:0; bottom:0; }
+    .hidden { display:none !important; }
+    @media (max-width: 640px) { .toolbar{grid-template-columns:1fr;} .title-bar{flex-direction:column; align-items:flex-start;} }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <div class="title-bar">
+        <div class="brand">서버리스 미디어 호스팅</div>
+        <div class="controls">
+          <button class="btn primary" id="btnPick">파일 선택</button>
+          <button class="btn" id="btnPaste">클립보드 붙여넣기</button>
+          <label class="chip"><input type="checkbox" id="chkPublic" checked> 공개 업로드</label>
+          <input class="input" id="token" placeholder="액세스 토큰(선택)" style="width:200px;">
+          <button class="btn" id="btnSettings">설정</button>
+        </div>
+      </div>
+      <div class="toolbar">
+        <div class="search-row">
+          <input class="input" id="q" placeholder="검색어(파일명, 태그)" style="flex:1; min-width:220px;">
+          <input class="input" id="tags" placeholder="태그(쉼표구분)" style="width:220px">
+          <select id="sort" class="input">
+            <option value="createdAt:desc">최신순</option>
+            <option value="createdAt:asc">오래된순</option>
+            <option value="size:desc">용량 큰순</option>
+            <option value="size:asc">용량 작은순</option>
+          </select>
+          <button class="btn" id="btnSearch">검색</button>
+        </div>
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+          <div class="chip"><b>개수:</b> <span id="kCount">0</span></div>
+          <div class="chip"><b>총용량:</b> <span id="kSize">0</span> MB</div>
+          <div class="chip"><b>CDN:</b> <span id="kBandwidth">Static</span></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div id="drop" class="dropzone">
+      <div>
+        <div style="font-weight:700; margin-bottom:6px;">이미지/동영상 업로드</div>
+        <div class="chip">PNG · JPG · WEBP · GIF · MP4 · WebM · MOV</div>
+        <div style="margin-top:6px; color:#9aa4b2; font-size:14px;">드래그&드롭 또는 버튼으로 선택하세요. 최대 2GB.</div>
+      </div>
+      <input type="file" id="fileInput" class="hidden" multiple accept="image/*,video/*">
+    </div>
+
+    <div class="grid" id="grid"></div>
+    <div id="sentinel" style="height:40px;"></div>
+  </main>
+
+  <div class="lightbox" id="lightbox">
+    <div class="lightbox-inner">
+      <div class="lightbox-head">
+        <div id="lbTitle" style="display:flex; gap:8px; align-items:center;">
+          <span id="lbName"></span>
+          <span id="lbInfo" class="chip"></span>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn" id="btnCopyUrl">URL 복사</button>
+          <button class="btn danger" id="btnDelete">삭제</button>
+          <button class="btn" id="btnClose">닫기</button>
+        </div>
+      </div>
+      <div class="viewer" id="viewer"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <footer class="footer">정적 프런트엔드 + Vercel Functions + S3 Presigned 업로드/삭제</footer>
+
+  <script>
+    const CONFIG = {
+      ENDPOINT_UPLOAD_URL: '/api/upload-url',
+      ENDPOINT_LIST: '/api/list',
+      ENDPOINT_DELETE_URL: '/api/delete-url',
+      ENDPOINT_METADATA: '/api/metadata',
+      PAGE_SIZE: 24,
+      MAX_FILE_SIZE: 2 * 1024 * 1024 * 1024,
+      IMAGE_TYPES: ['image/jpeg','image/png','image/webp','image/gif','image/avif'],
+      VIDEO_TYPES: ['video/mp4','video/webm','video/quicktime','video/x-matroska'],
+      RETRY: { attempts: 3, backoffMs: 800 }
+    };
+
+    const state = { cursor:null, loading:false, items:[], current:null, query:'', tags:[], sort:'createdAt:desc', token:'', totalBytes:0 };
+    const $ = (s, r=document)=> r.querySelector(s);
+    const fmtBytes = n => { const u=['B','KB','MB','GB','TB']; let i=0,v=n; while(v>=1024 && i<u.length-1){v/=1024;i++;} return `${v.toFixed(v>=10?0:1)} ${u[i]}`; };
+    const toast = (m,ms=2200)=>{ const t=$('#toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), ms); };
+
+    function saveLocal(){ localStorage.setItem('srv_media_cfg', JSON.stringify({ q:state.query, tags:state.tags, sort:state.sort, token:state.token, pub:$('#chkPublic').checked })); }
+    function loadLocal(){ const raw=localStorage.getItem('srv_media_cfg'); if(!raw) return; try{ const o=JSON.parse(raw); state.query=o.q||''; state.tags=o.tags||[]; state.sort=o.sort||'createdAt:desc'; state.token=o.token||''; $('#q').value=state.query; $('#tags').value=state.tags.join(','); $('#sort').value=state.sort; $('#token').value=state.token; $('#chkPublic').checked=o.pub??true; }catch{} }
+
+    async function probeVideo(file){ return new Promise(res=>{ const url=URL.createObjectURL(file); const v=document.createElement('video'); v.preload='metadata'; v.src=url; v.onloadedmetadata=()=>{ res({width:v.videoWidth, height:v.videoHeight, duration:v.duration}); URL.revokeObjectURL(url);}; v.onerror=()=>{res({}); URL.revokeObjectURL(url);} }); }
+
+    function createCard(item){
+      const isVideo=item.type?.startsWith('video');
+      const el=document.createElement('div'); el.className='card'; el.dataset.key=item.key;
+      const media=document.createElement(isVideo?'video':'img'); media.className='thumb'; media.loading='lazy'; media.src=item.thumbUrl||item.url;
+      if(isVideo){ media.muted=true; media.playsInline=true; media.preload='metadata'; media.addEventListener('mouseenter',()=>{media.currentTime=0; media.play().catch(()=>{});}); media.addEventListener('mouseleave',()=>media.pause()); }
+      const wrap=document.createElement('div'); wrap.className='thumb-wrap'; wrap.appendChild(media);
+      const badge=document.createElement('div'); badge.className='badge';
+      const dim=(item.width&&item.height)?`${item.width}×${item.height}`:''; const dur=item.duration?` / ${item.duration.toFixed(1)}s`:''; badge.textContent=`${isVideo?'Video':'Image'} • ${fmtBytes(item.size||0)}${dim?' • '+dim:''}${dur}`;
+      const meta=document.createElement('div'); meta.className='meta';
+      const left=document.createElement('div'); left.style.display='flex'; left.style.gap='8px'; left.style.alignItems='center';
+      const name=document.createElement('div'); name.textContent=(item.key||'').split('/').pop(); name.style.whiteSpace='nowrap'; name.style.overflow='hidden'; name.style.textOverflow='ellipsis';
+      left.appendChild(name);
+      if(item.tags?.length){ const tg=document.createElement('span'); tg.className='tag'; tg.textContent=item.tags.slice(0,3).join(','); left.appendChild(tg); }
+      const right=document.createElement('div'); const btn=document.createElement('button'); btn.className='btn'; btn.textContent='열기'; btn.onclick=()=>openLightbox(item); right.appendChild(btn);
+      meta.appendChild(left); meta.appendChild(right);
+      el.appendChild(wrap); el.appendChild(badge); el.appendChild(meta);
+      return el;
+    }
+
+    function openLightbox(item){
+      state.current=item;
+      $('#lbName').textContent=item.key.split('/').pop();
+      const parts=[]; if(item.width&&item.height) parts.push(`${item.width}×${item.height}`); if(item.duration) parts.push(`${item.duration.toFixed(1)}s`); parts.push(fmtBytes(item.size||0)); $('#lbInfo').textContent=parts.join(' • ');
+      const v=$('#viewer'); v.innerHTML='';
+      if(item.type?.startsWith('video')){ const vid=document.createElement('video'); vid.src=item.url; vid.controls=true; vid.playsInline=true; v.appendChild(vid); } else { const img=document.createElement('img'); img.src=item.url; img.alt=item.key; v.appendChild(img); }
+      $('#lightbox').classList.add('open');
+    }
+    function closeLightbox(){ $('#lightbox').classList.remove('open'); $('#viewer').innerHTML=''; }
+
+    async function requestUploadUrl({ filename, contentType, tags, isPublic, token }){
+      const res=await fetch(CONFIG.ENDPOINT_UPLOAD_URL,{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ filename, contentType, tags, isPublic, token }) });
+      if(!res.ok) throw new Error('업로드 URL 발급 실패'); return res.json();
+    }
+    async function requestDeleteUrl({ key, token }){
+      const res=await fetch(CONFIG.ENDPOINT_DELETE_URL,{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ key, token }) });
+      if(!res.ok) throw new Error('삭제 URL 발급 실패'); return res.json();
+    }
+
+    async function uploadWithRetry(url,file,headers={},attempts=CONFIG.RETRY.attempts){
+      let err; for(let i=0;i<attempts;i++){ try{ const res=await fetch(url,{method:'PUT', body:file, headers}); if(res.ok) return true; err=new Error('업로드 실패: '+res.status);}catch(e){err=e;} await new Promise(r=>setTimeout(r, CONFIG.RETRY.backoffMs*(i+1))); } throw err;
+    }
+
+    function addUploadingCard(file){
+      const el=document.createElement('div'); el.className='card';
+      const wrap=document.createElement('div'); wrap.className='thumb-wrap';
+      const label=document.createElement('div'); label.textContent=`업로드 중… ${file.name}`; label.style.color='#b7c4d6';
+      wrap.appendChild(label);
+      const prog=document.createElement('div'); prog.className='prog'; const bar=document.createElement('div'); prog.appendChild(bar);
+      el.appendChild(wrap); el.appendChild(prog); $('#grid').prepend(el);
+      let loaded=0, total=file.size||1; const timer=setInterval(()=>{ loaded=Math.min(total, loaded+total/40); bar.style.width=(loaded/total*100).toFixed(1)+'%'; },120);
+      return { setDone(){ clearInterval(timer); bar.style.width='100%'; setTimeout(()=>el.remove(),300); }, setError(msg){ clearInterval(timer); label.textContent=msg; label.style.color='#ffcccc'; setTimeout(()=>el.remove(),1200); } };
+    }
+
+    async function handleFiles(files){
+      const tags=($('#tags').value||'').split(',').map(s=>s.trim()).filter(Boolean);
+      const isPublic=$('#chkPublic').checked;
+      const token=$('#token').value||undefined;
+
+      for(const file of files){
+        if(file.size > CONFIG.MAX_FILE_SIZE){ toast(`용량 초과: ${file.name}`); continue; }
+        const ctl=addUploadingCard(file);
+        try{
+          const contentType=file.type || 'application/octet-stream';
+          const { uploadUrl, publicUrl, storageKey } = await requestUploadUrl({ filename:file.name, contentType, tags, isPublic, token });
+
+          let width,height,duration;
+          if(file.type.startsWith('video/')){ try{ const meta=await probeVideo(file); width=meta.width; height=meta.height; duration=meta.duration; }catch{} }
+
+          await uploadWithRetry(uploadUrl,file,{ 'Content-Type':contentType });
+
+          try{
+            await fetch(CONFIG.ENDPOINT_METADATA,{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ key:storageKey, width, height, duration, tags }) });
+          }catch{}
+
+          ctl.setDone(); toast(`업로드 완료: ${file.name}`);
+
+          const item={ key:storageKey, url:publicUrl, type:contentType, size:file.size, width, height, duration, tags, createdAt:Date.now() };
+          state.items.unshift(item); $('#grid').prepend(createCard(item)); state.totalBytes += file.size; refreshKPI();
+        }catch(e){ console.error(e); ctl.setError(`실패: ${file.name}`); toast(`업로드 실패: ${file.name}`); }
+      }
+    }
+
+    async function loadMore(reset=false){
+      if(state.loading) return; state.loading=true;
+      if(reset){ state.cursor=null; state.items=[]; $('#grid').innerHTML=''; state.totalBytes=0; }
+      const params=new URLSearchParams(); params.set('limit', CONFIG.PAGE_SIZE);
+      if(state.cursor) params.set('cursor', state.cursor);
+      if(state.query) params.set('query', state.query);
+      if(state.tags?.length) params.set('tags', state.tags.join(','));
+      if(state.sort) params.set('sort', state.sort);
+      try{
+        const res=await fetch(`${CONFIG.ENDPOINT_LIST}?`+params.toString(), { headers: state.token?{ Authorization:`Bearer ${state.token}` }:{} });
+        if(!res.ok) throw new Error('목록 조회 실패'); const data=await res.json();
+        const items=data.items||[]; const frag=document.createDocumentFragment();
+        for(const it of items){ state.items.push(it); state.totalBytes += (it.size||0); frag.appendChild(createCard(it)); }
+        $('#grid').appendChild(frag); state.cursor=data.nextCursor||null; refreshKPI();
+      }catch(e){ console.error(e); toast('목록을 불러오지 못했습니다.'); } finally{ state.loading=false; }
+    }
+
+    function refreshKPI(){ $('#kCount').textContent=state.items.length; $('#kSize').textContent=(state.totalBytes/1024/1024).toFixed(1); }
+
+    async function deleteCurrent(){
+      const it=state.current; if(!it) return; if(!confirm('정말 삭제할까요?')) return;
+      try{
+        const { deleteUrl } = await requestDeleteUrl({ key:it.key, token:state.token||undefined });
+        const r=await fetch(deleteUrl,{ method:'DELETE' }); if(!r.ok) throw new Error('삭제 실패');
+        toast('삭제 완료'); closeLightbox();
+        const idx=state.items.findIndex(x=>x.key===it.key); if(idx>=0){ const [rm]=state.items.splice(idx,1); state.totalBytes -= (rm.size||0); refreshKPI(); }
+        const card=document.querySelector(`.card[data-key="${CSS.escape(it.key)}"]`); if(card) card.remove();
+      }catch(e){ console.error(e); toast('삭제 중 오류가 발생했습니다.'); }
+    }
+
+    function initDrop(){
+      const dz=$('#drop'), fi=$('#fileInput');
+      dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.classList.add('drag'); });
+      dz.addEventListener('dragleave', ()=>dz.classList.remove('drag'));
+      dz.addEventListener('drop', e=>{ e.preventDefault(); dz.classList.remove('drag'); if(e.dataTransfer?.files?.length) handleFiles(e.dataTransfer.files); });
+      $('#btnPick').onclick=()=>fi.click();
+      fi.onchange=()=>{ if(fi.files?.length) handleFiles(fi.files); fi.value=''; };
+      $('#btnPaste').onclick=async ()=>{ try{ const items=await navigator.clipboard.read(); const files=[]; for(const it of items){ for(const t of it.types){ if(t.startsWith('image/')||t.startsWith('video/')){ const blob=await it.getType(t); const ext=t.split('/')[1]||'bin'; files.push(new File([blob], `pasted-${Date.now()}.${ext}`, { type:t })); } } } if(files.length) handleFiles(files); else toast('클립보드에서 이미지/동영상을 찾지 못했습니다.'); }catch{ toast('클립보드 접근이 차단되었거나 지원되지 않습니다.'); } };
+    }
+
+    function initSearch(){
+      $('#btnSearch').onclick=()=>{ state.query=$('#q').value.trim(); state.tags=($('#tags').value||'').split(',').map(s=>s.trim()).filter(Boolean); state.sort=$('#sort').value; saveLocal(); loadMore(true); };
+      $('#sort').onchange=()=>$('#btnSearch').click();
+      $('#q').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#btnSearch').click(); });
+      $('#tags').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#btnSearch').click(); });
+    }
+
+    function initInfinite(){
+      const io=new IntersectionObserver(es=>{ for(const e of es){ if(e.isIntersecting && state.cursor) loadMore(false); } }, {rootMargin:'1200px'}); io.observe($('#sentinel'));
+    }
+
+    function initLightbox(){
+      $('#btnClose').onclick=closeLightbox;
+      $('#lightbox').addEventListener('click',e=>{ if(e.target.id==='lightbox') closeLightbox(); });
+      $('#btnCopyUrl').onclick=async ()=>{ if(!state.current) return; await navigator.clipboard.writeText(state.current.url); toast('URL 복사됨'); };
+      $('#btnDelete').onclick=deleteCurrent;
+    }
+
+    function initSettings(){
+      $('#btnSettings').onclick=()=>{ const epUp=prompt('업로드 URL 엔드포인트', CONFIG.ENDPOINT_UPLOAD_URL); if(epUp) CONFIG.ENDPOINT_UPLOAD_URL=epUp;
+        const epList=prompt('목록 URL 엔드포인트', CONFIG.ENDPOINT_LIST); if(epList) CONFIG.ENDPOINT_LIST=epList;
+        const epDel=prompt('삭제 URL 엔드포인트', CONFIG.ENDPOINT_DELETE_URL); if(epDel) CONFIG.ENDPOINT_DELETE_URL=epDel;
+        const token=prompt('기본 액세스 토큰(선택)', $('#token').value||''); if(token!==null){ $('#token').value=token; state.token=token; saveLocal(); }
+        toast('설정이 저장되었습니다.');
+      };
+      $('#token').onchange=()=>{ state.token=$('#token').value; saveLocal(); };
+      $('#chkPublic').onchange=saveLocal;
+    }
+
+    (function main(){ loadLocal(); initDrop(); initSearch(); initInfinite(); initLightbox(); initSettings(); loadMore(true); })();
+  </script>
+</body>
+</html>
